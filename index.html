@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Sentient Run – 3-Lane Runner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --amber:#2D6BFF; --teal:#FF66CC;
+    --panel:#11161b; --muted:#c9d3de;
+    --hud-pad:12px;
+    --ammo-icon:32px; /* JS updates by scale */
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0; font-family:Montserrat,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:#EDEFF2;
+    background:
+      radial-gradient(1000px 700px at 18% 8%, rgba(45,107,255,.45), transparent 70%),
+      radial-gradient(900px 620px at 82% 12%, rgba(255,59,89,.38), transparent 70%),
+      radial-gradient(1100px 800px at 50% 92%, rgba(255,102,204,.40), transparent 70%),
+      linear-gradient(180deg,#0b0e12 0%,#0a0d11 100%);
+    min-height:100dvh;
+  }
+
+  .layout{ display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:16px; max-width:1120px; margin:18px auto; padding:0 12px; }
+  @media (max-width:860px){ .layout{ grid-template-columns:1fr; } }
+
+  /* Top HUD (outside the game) */
+  #hud{position:relative; height:48px; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  #scoreBox{ background:rgba(17,22,27,.85); padding:8px 12px; border-radius:12px; border:1px solid rgba(45,107,255,.35); box-shadow:0 6px 20px rgba(0,0,0,.25); font-weight:800 }
+  #userBox{ display:flex; align-items:center; gap:10px; background:rgba(17,22,27,.85); backdrop-filter:blur(6px); padding:6px 10px; border-radius:999px; border:1px solid rgba(45,107,255,.45) }
+  #userBox img{ width:32px; height:32px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,102,204,.6) }
+  #userBox .hdl{ font-weight:800 }
+
+  /* ===== GAME AREA ===== */
+  #gameWrap{ display:flex; justify-content:flex-start; }
+  #gameFrame{
+    position:relative;
+    width:min(520px, 96vw);
+    aspect-ratio:9/16;
+    border-radius:20px;
+    overflow:hidden;                 /* kritik: her şey alanın içinde kalır */
+    background:#071019;
+    box-shadow:0 14px 46px rgba(0,0,0,.45);
+    border:1px solid #20314a;
+  }
+  #game{ width:100%; height:100%; display:block; } /* gerçek piksel JS’te */
+
+  /* In-canvas HUD (INSIDE the game rectangle) */
+  #hudInCanvas{ position:absolute; inset:0; pointer-events:none; z-index:5; }
+  #ammoHUD{
+    position:absolute; right:var(--hud-pad); top:var(--hud-pad);
+    display:flex; align-items:center; gap:10px; pointer-events:none;
+    padding:10px 14px; border-radius:14px; font-weight:900;
+    background:rgba(17,22,27,.92); border:1px solid rgba(45,107,255,.45);
+    box-shadow:0 10px 28px rgba(0,0,0,.35);
+    font-size:18px; letter-spacing:.2px;
+  }
+  #ammoHUD img{ width:var(--ammo-icon); height:var(--ammo-icon); display:block }
+  #ammoHUD.low{ border-color:#ff6b6b; box-shadow:0 0 0 2px rgba(255,107,107,.25) inset; }
+  @keyframes ammoFlash {
+    0%   { transform:scale(1); box-shadow:0 0 0 rgba(45,107,255,.0); }
+    50%  { transform:scale(1.06); box-shadow:0 0 24px rgba(45,107,255,.35); }
+    100% { transform:scale(1); box-shadow:0 0 0 rgba(45,107,255,.0); }
+  }
+  #ammoHUD.flash{ animation: ammoFlash .38s ease-out; }
+
+  /* Mobile on-screen controls (only on touch devices) */
+  #controls{ position:absolute; inset:0; pointer-events:none; display:none; z-index:6; }
+  .ctrlBtn{
+    position:absolute; bottom:14px; width:76px; height:76px; border-radius:50%;
+    background:rgba(255,255,255,.06); border:1px solid #25324a;
+    display:grid; place-items:center; font-size:20px; font-weight:800; pointer-events:auto; user-select:none;
+  }
+  .ctrlBtn:active{ transform:scale(.98) }
+  .left{ left:12px } .right{ right:12px }
+  #fireBtn{ left:50%; transform:translateX(-50%); width:112px; height:56px; border-radius:14px; font-size:14px }
+  @media (hover:none) and (pointer:coarse){ #controls{ display:block; } }
+
+  /* Leaderboard */
+  #leaderboard{ background: radial-gradient(70% 90% at 30% 20%, #13181c, #0a0b0d); border:2px solid var(--amber); box-shadow:0 0 16px rgba(45,107,255,.35), 0 0 24px rgba(255,102,204,.25) inset; border-radius:16px; padding:12px; max-height:70vh; overflow:auto }
+  #lb-title{ font-weight:800; color:var(--amber); display:flex; justify-content:space-between; align-items:center; margin-bottom:6px }
+  #lb-meta{ font-size:.85rem; opacity:.85 }
+  #lb-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px }
+  .lb-item{ display:flex; align-items:center; gap:.6rem; background:rgba(255,255,255,.04); padding:6px 8px; border-radius:10px; border:1px solid rgba(45,107,255,.18) }
+  .lb-rank{ width:2.2rem; text-align:right; font-weight:800; color:var(--amber) }
+  .lb-avatar{ width:24px; height:24px; border-radius:50%; object-fit:cover; border:1px solid rgba(45,107,255,.6) }
+  .lb-handle{ font-weight:700 }
+  .lb-stats{ margin-left:auto; opacity:.9; font-size:.95rem }
+  #lb-loading{ text-align:center; padding:.5rem 0; opacity:.7; display:none }
+
+  /* Dialogs */
+  .overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(6px); z-index:50 }
+  .card{ width:min(520px,92vw); background:#11161b; border:1px solid #222b3a; padding:18px; border-radius:18px; box-shadow:0 30px 80px rgba(0,0,0,.45) }
+  .title{ font-size:22px; font-weight:800; margin:0 0 8px; color:var(--amber) }
+  .muted{ color:var(--muted) }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center } .row>*{ flex:1 }
+  input[type=text]{ width:100%; background:#0f1420; color:#fff; border:1px solid rgba(45,107,255,.45); padding:12px 14px; border-radius:12px; outline:none }
+  button{ cursor:pointer; background:linear-gradient(90deg, var(--amber), var(--teal)); color:#fff; border:0; padding:12px 16px; border-radius:12px; font-weight:800 }
+  button.secondary{ background:#223049 }
+  button.ghost{ background:transparent; border:1px solid #2a3550 }
+
+  /* Compact Game Over panel */
+  #gameover{ position:fixed; top:50%; left:14px; transform:translateY(-50%); background:transparent; backdrop-filter:none; display:none; align-items:center; justify-content:center; z-index:60; pointer-events:none }
+  #gameover .card{ width:300px; pointer-events:auto }
+  #gameover .sharePreview img{ width:100%; height:auto; max-height:160px; object-fit:contain; display:block }
+
+  @media (max-width:860px){
+    .layout{ grid-template-columns:1fr; }
+    #leaderboard{ max-height:30vh; }
+    #gameover{ left:50%; transform:translate(-50%,-50%); }
+    #gameover .card{ width:min(88vw, 360px); }
+    :root{ --ammo-icon:28px; --hud-pad:10px; }
+  }
+</style>
+</head>
+<body>
+  <div class="layout">
+    <!-- LEFT: Game -->
+    <div>
+      <div id="hud">
+        <div id="scoreBox">Score: <span id="score">0</span></div>
+        <div id="userBox" title="X profile">
+          <img id="avatar" alt="pfp"/>
+          <div class="hdl" id="handle">@guest</div>
+        </div>
+      </div>
+
+      <div id="gameWrap">
+        <!-- CLIPPED GAME FRAME -->
+        <div id="gameFrame">
+          <canvas id="game"></canvas>
+
+          <!-- HUD INSIDE THE GAME AREA -->
+          <div id="hudInCanvas">
+            <div id="ammoHUD" aria-live="polite">
+              <img src="assets/bullet.png" alt="ammo"/>
+              <span id="ammoCount">5</span>
+            </div>
+          </div>
+
+          <!-- Mobile controls (only touch) -->
+          <div id="controls">
+            <div class="ctrlBtn left"  data-dir="-1">⟵</div>
+            <div class="ctrlBtn right" data-dir="1">⟶</div>
+            <div class="ctrlBtn" id="fireBtn">FIRE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Leaderboard -->
+    <aside id="leaderboard">
+      <div id="lb-title"><span>🏆 Leaderboard</span><span id="lb-meta"></span></div>
+      <ol id="lb-list"></ol>
+      <div id="lb-loading">Loading…</div>
+    </aside>
+  </div>
+
+  <!-- Start -->
+  <div id="start" class="overlay" role="dialog" aria-modal="true">
+    <div class="card">
+      <h1 class="title">Sentient Run</h1>
+      <div class="muted">Enter your X (Twitter) handle. We'll fetch your avatar and start the game.</div>
+      <div class="row"><input id="inputHandle" type="text" placeholder="e.g., sentient_io" autocomplete="off"/></div>
+      <div class="row">
+        <button id="btnStart">Play</button>
+        <button id="btnNoX" class="secondary">Play without X</button>
+      </div>
+      <div class="muted" style="font-size:12px; margin-top:6px">
+        Controls (mobile): ← / → lanes • <b>FIRE</b> to shoot. Gems +5 • Ammo pickups +3.
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Over -->
+  <div id="gameover" class="overlay" role="dialog" aria-modal="true">
+    <div class="card">
+      <h2 class="title" style="margin-bottom:2px">Game Over</h2>
+      <div class="muted" id="finalTxt">Your score: 0</div>
+      <div class="sharePreview" style="width:100%; background:#0f1420; border:1px dashed #2a3550; border-radius:12px; padding:8px; display:flex; align-items:center; justify-content:center">
+        <img id="shareImg" alt="share card"/>
+      </div>
+      <div class="row">
+        <button id="btnAgain">Play Again</button>
+        <a id="dlBtn" download="sentient-score.png"><button class="ghost" style="width:100%">Download Card</button></a>
+      </div>
+      <div class="row"><button id="tweetBtn" class="secondary">Share on X</button></div>
+    </div>
+  </div>
+
+<script>
+/* ================= SINGLE SCALE ================= */
+const GAME_SCALE = 1.0;
+const SIZE = {
+  SHIP_H_PCT:   0.075,
+  METEOR_R_PCT: 0.042,
+  PICKUP_R_PCT: 0.030,
+  BULLET_R_PCT: 0.012,
+  HUD_ICON_PX:  Math.round(32 * GAME_SCALE)
+};
+
+/* ================= SETTINGS ================= */
+const LANES = 3;
+const BASE_SPEED = 7;
+const MAX_SPEED  = 30000;
+const ACCEL_EVERY_MS = 15000;
+const SPEED_STEP = 1;
+
+const METEOR_SPAWN_MS = [800, 1200];
+const PICKUP_SPAWN_MS = [900, 1500];
+const AMMO_CHANCE = 0.25;
+const GEM_SCORE = 5;
+const START_AMMO = 5;
+const AMMO_PICKUP_AMT = 3;
+const BULLET_SPEED = 14;
+
+const SHIP_IMG_SRC   = 'assets/ship.png';
+const METEOR_IMG_SRC = 'assets/meteor.png';
+const AMMO_IMG_SRC   = 'assets/bullet.png';
+const GEM_IMG_SRC    = 'assets/gem.png';
+
+const API_SUBMIT = '/api/run-submit';
+const API_LEADER = '/api/run-leaderboard';
+
+/* ================= STATE ================= */
+const frame  = document.getElementById('gameFrame');
+const canvas = document.getElementById('game');
+const ctx    = canvas.getContext('2d');
+let state = {
+  running:false, speed: BASE_SPEED, laneX: [],
+  W:0, H:0, dpr: Math.max(1, Math.min(2, window.devicePixelRatio || 1)),
+  sizes:{ shipW:0, shipH:0, meteorR:0, pickupR:0, bulletR:0 },
+  player: { lane:1, x:0, y:0, r:16 },
+  meteors: [], pickups: [], bullets: [],
+  stars: [],                                 // ⭐ Uzay için
+  score: 0, ammo: START_AMMO,
+  lastMeteor: 0, lastPickup: 0, lastAccel: 0,
+  handle: '@guest', avatarImg: null, runStartMs: 0,
+};
+
+document.documentElement.style.setProperty('--ammo-icon', SIZE.HUD_ICON_PX + 'px');
+
+/* ================= RESIZE ================= */
+const BG_MARGIN = 8, BG_RADIUS = 18;        // oyun alanı iç kenarı
+function resize(){
+  const d = state.dpr;
+  const rect = frame.getBoundingClientRect();
+  const wCss = Math.floor(rect.width);
+  const hCss = Math.floor(rect.height);
+
+  canvas.width  = Math.floor(wCss * d);
+  canvas.height = Math.floor(hCss * d);
+  state.W = canvas.width; state.H = canvas.height;
+
+  const laneWidth = state.W / LANES;
+  state.laneX = [laneWidth * 0.5, laneWidth * 1.5, laneWidth * 2.5];
+
+  state.sizes = {
+    shipH:   state.H * SIZE.SHIP_H_PCT   * GAME_SCALE,
+    shipW:   state.H * SIZE.SHIP_H_PCT   * GAME_SCALE,
+    meteorR: state.H * SIZE.METEOR_R_PCT * GAME_SCALE,
+    pickupR: state.H * SIZE.PICKUP_R_PCT * GAME_SCALE,
+    bulletR: state.H * SIZE.BULLET_R_PCT * GAME_SCALE,
+  };
+
+  state.player.x = state.laneX[state.player.lane];
+  state.player.y = canvas.height - (state.sizes.shipH * 2.0);
+  state.player.r = state.sizes.shipH * 0.33;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  initStars(); // ⭐ yıldızları yeni boyuta göre kur
+}
+window.addEventListener('resize', resize); resize();
+
+/* ================= IMAGES ================= */
+const images = { ship:null, meteor:null, ammo:null, gem:null };
+function loadImg(key, src){ if(!src) return; const im = new Image(); im.crossOrigin='anonymous'; im.src = src; im.onerror=()=>{ images[key]=null; }; images[key]=im; }
+loadImg('ship',   SHIP_IMG_SRC);
+loadImg('meteor', METEOR_IMG_SRC);
+loadImg('ammo',   AMMO_IMG_SRC);
+loadImg('gem',    GEM_IMG_SRC);
+
+/* ================= HELPERS ================= */
+const rnd=(a,b)=> a + Math.random()*(b-a);
+function roundRect(x,y,w,h,r){ const rr = Math.min(r, w/2, h/2); ctx.beginPath(); ctx.moveTo(x+rr,y); ctx.arcTo(x+w,y, x+w,y+h, rr); ctx.arcTo(x+w,y+h, x,y+h, rr); ctx.arcTo(x,y+h, x,y, rr); ctx.arcTo(x,y, x+w,y, rr); ctx.closePath(); }
+function bump(el){ if(!el) return; el.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}], { duration:160, easing:'cubic-bezier(.2,.7,.2,1)'}); }
+const scoreBox = document.getElementById('scoreBox');
+const ammoHudEl = document.getElementById('ammoHUD');
+const ammoCountEl = document.getElementById('ammoCount');
+function flashAmmo(){ ammoHudEl.classList.remove('flash'); void ammoHudEl.offsetWidth; ammoHudEl.classList.add('flash'); }
+function setAmmo(n){
+  state.ammo = Math.max(0, n);
+  ammoCountEl.textContent = state.ammo;
+  ammoHudEl.classList.toggle('low', state.ammo<=2);
+  flashAmmo();
+}
+
+/* ================= SPACE BACKGROUND (ONLY INSIDE RECT) ================= */
+function innerRect(){ // oyun alanının iç clip alanı
+  return { x:BG_MARGIN, y:BG_MARGIN, w:state.W - BG_MARGIN*2, h:state.H - BG_MARGIN*2 };
+}
+function initStars(){
+  const {w,h,x,y} = innerRect();
+  state.stars.length = 0;
+  const n = Math.floor((w*h)/12000);      // yoğunluk
+  for (let i=0;i<n;i++){
+    state.stars.push({
+      x: x + Math.random()*w,
+      y: y + Math.random()*h,
+      r: 0.5 + Math.random()*1.6,
+      v: 0.8 + Math.random()*2.0,          // hız (frame başına px)
+      tw: Math.random()*Math.PI*2          // twinkle faz
+    });
+  }
+}
+
+/* ================= DRAW ================= */
+function drawShip(x,y,w,h){
+  if (images.ship && images.ship.complete){ ctx.drawImage(images.ship, x - w/2, y - h/2, w, h); return; }
+  ctx.fillStyle='#e5e7eb'; ctx.beginPath(); ctx.moveTo(x-w*0.55, y+h*0.40); ctx.lineTo(x+w*0.65, y); ctx.lineTo(x-w*0.55, y-h*0.40); ctx.closePath(); ctx.fill();
+}
+function drawMeteor(x,y,r){
+  if (images.meteor && images.meteor.complete){ const s=r*2; ctx.drawImage(images.meteor, x-r, y-r, s, s); return; }
+  ctx.fillStyle='#c2410c'; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+}
+function drawPickup(x,y,r,type){
+  const img = (type==='ammo') ? images.ammo : images.gem;
+  if (img && img.complete){ const s=r*2; ctx.drawImage(img, x-r, y-r, s, s); return; }
+  ctx.fillStyle = type==='ammo' ? '#60a5fa' : '#22c55e';
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+}
+function drawBullet(x,y,r){
+  if (images.ammo && images.ammo.complete){
+    ctx.save(); const s = r*2.2; ctx.translate(x,y); ctx.drawImage(images.ammo, -s/2, -s/2, s, s); ctx.restore(); return;
+  }
+  ctx.fillStyle = '#e5e7eb'; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+}
+
+/* ================= GAME LOOP ================= */
+let lastMs = 0;
+function loop(ms){
+  if(!state.running) return;
+  const dt = lastMs ? (ms - lastMs) : 16; lastMs = ms;
+  update(dt); render(); requestAnimationFrame(loop);
+}
+
+function update(dt){
+  state.lastAccel += dt; if (state.lastAccel >= ACCEL_EVERY_MS){ state.lastAccel = 0; state.speed = Math.min(MAX_SPEED, state.speed + SPEED_STEP); }
+
+  state.lastMeteor += dt; state.lastPickup += dt;
+  if (state.lastMeteor >= rnd(...METEOR_SPAWN_MS)){ state.lastMeteor = 0; spawnMeteor(); }
+  if (state.lastPickup >= rnd(...PICKUP_SPAWN_MS)){ state.lastPickup = 0; spawnPickup(); }
+
+  const vy = state.speed * state.dpr;
+  for (const m of state.meteors) m.y += vy;
+  for (const p of state.pickups) p.y += vy;
+  for (const b of state.bullets)  b.y -= BULLET_SPEED * state.dpr;
+
+  // ⭐ yıldızlar akışı (sadece alan içinde)
+  const {x,y,w,h} = innerRect();
+  for (const s of state.stars){
+    s.y += s.v * (1 + state.speed*0.015);      // hız, oyuna göre biraz artar
+    if (s.y > y + h + 2){ s.y = y - 2; s.x = x + Math.random()*w; }
+    s.tw += 0.06;                               // twinkle fazı
+  }
+
+  const H = canvas.height;
+  state.meteors = state.meteors.filter(m => m.y - m.r < H+10);
+  state.pickups = state.pickups.filter(p => !p.hit && (p.y - p.r < H+10));
+  state.bullets = state.bullets.filter(b => b.y + state.sizes.bulletR > -20);
+
+  const px = state.laneX[state.player.lane], py = state.player.y, pr = state.player.r;
+
+  for (const m of state.meteors){
+    if (m.lane === state.player.lane && Math.abs(m.y - py) < (m.r + pr - 6)){ return gameOver(); }
+  }
+  for (const p of state.pickups){
+    if (!p.hit && p.lane === state.player.lane && Math.abs(p.y - py) < (p.r + pr - 8)){
+      p.hit = true;
+      if (p.type === 'ammo'){ setAmmo(state.ammo + AMMO_PICKUP_AMT); }
+      else { state.score += GEM_SCORE; document.getElementById('score').textContent = state.score; bump(scoreBox); }
+    }
+  }
+
+  outer: for (let i=0;i<state.bullets.length;i++){
+    const b = state.bullets[i];
+    for (let j=0;j<state.meteors.length;j++){
+      const m = state.meteors[j];
+      if (m.lane !== b.lane) continue;
+      if (Math.abs(m.y - b.y) < (m.r + state.sizes.bulletR)){
+        state.bullets.splice(i,1); i--;
+        state.meteors.splice(j,1);
+        break outer;
+      }
+    }
+  }
+}
+
+function render(){
+  const W = canvas.width, H = canvas.height; ctx.clearRect(0,0,W,H);
+
+  /* === SPACE BACKGROUND only inside rounded rect === */
+  ctx.save();
+  roundRect(BG_MARGIN, BG_MARGIN, W - BG_MARGIN*2, H - BG_MARGIN*2, BG_RADIUS);
+  ctx.clip();
+
+  // derin uzay gradyanı
+  const g = ctx.createLinearGradient(0, BG_MARGIN, 0, H - BG_MARGIN);
+  g.addColorStop(0,'#0c1430'); g.addColorStop(1,'#08101d');
+  ctx.fillStyle = g; ctx.fillRect(BG_MARGIN, BG_MARGIN, W - BG_MARGIN*2, H - BG_MARGIN*2);
+
+  // nebula parlamaları
+  const neb1 = ctx.createRadialGradient(W*0.25, H*0.22, 10, W*0.25, H*0.22, Math.min(W,H)*0.35);
+  neb1.addColorStop(0,'rgba(45,107,255,.28)'); neb1.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = neb1; ctx.fillRect(BG_MARGIN, BG_MARGIN, W - BG_MARGIN*2, H - BG_MARGIN*2);
+
+  const neb2 = ctx.createRadialGradient(W*0.78, H*0.30, 10, W*0.78, H*0.30, Math.min(W,H)*0.42);
+  neb2.addColorStop(0,'rgba(255,102,204,.22)'); neb2.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = neb2; ctx.fillRect(BG_MARGIN, BG_MARGIN, W - BG_MARGIN*2, H - BG_MARGIN*2);
+
+  // yıldızlar
+  ctx.save();
+  for (const s of state.stars){
+    const a = 0.55 + 0.45 * (0.5 + Math.sin(s.tw)*0.5); // twinkle
+    ctx.fillStyle = `rgba(214,225,255,${a})`;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+  ctx.restore();
+  /* === /SPACE BACKGROUND === */
+
+  // şerit çizgileri
+  const laneW = W / LANES; ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 2 * state.dpr; ctx.setLineDash([10*state.dpr, 12*state.dpr]);
+  for (let i=1;i<LANES;i++){ const x = laneW * i; ctx.beginPath(); ctx.moveTo(x, 10); ctx.lineTo(x, H-10); ctx.stroke(); }
+
+  // objeler
+  for (const p of state.pickups){ drawPickup(state.laneX[p.lane], p.y, p.r, p.type); }
+  for (const m of state.meteors){ drawMeteor(state.laneX[m.lane], m.y, m.r); }
+  for (const b of state.bullets){ drawBullet(state.laneX[b.lane], b.y, state.sizes.bulletR); }
+  drawShip(state.player.x, state.player.y, state.sizes.shipW*state.dpr, state.sizes.shipH*state.dpr);
+}
+
+/* ================= SPAWN / INPUT ================= */
+function spawnMeteor(){
+  const lane = (Math.random()*LANES)|0;
+  const r = state.sizes.meteorR * (0.9 + Math.random()*0.25);
+  state.meteors.push({ lane, y: -r*2, r });
+}
+function spawnPickup(){
+  const lane = (Math.random()*LANES)|0;
+  const type = (Math.random()<AMMO_CHANCE) ? 'ammo' : 'gem';
+  const r = state.sizes.pickupR;
+  state.pickups.push({ lane, y:-r*2, r, type, hit:false });
+}
+function moveLane(delta){
+  const old = state.player.lane;
+  const nl = Math.max(0, Math.min(2, old + delta));
+  if (nl !== old){ state.player.lane = nl; state.player.x = state.laneX[nl]; }
+}
+function shoot(){
+  if (!state.running || state.ammo <= 0) return;
+  setAmmo(state.ammo - 1);
+  ammoCountEl.animate([{transform:'translateY(0)'},{transform:'translateY(-6px)'},{transform:'translateY(0)'}],{duration:180, easing:'cubic-bezier(.2,.7,.2,1)'});
+  state.bullets.push({ lane: state.player.lane, y: state.player.y - state.player.r - 6*state.dpr });
+}
+
+/* Prevent page scroll for Space/Arrows (unless typing into input) */
+function isTypingTarget(t){ return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); }
+window.addEventListener('keydown', (e) => {
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','PageUp','PageDown'].includes(e.code) && !isTypingTarget(e.target)) {
+    e.preventDefault();
+  }
+  if(!state.running) return;
+  if (e.code === 'ArrowLeft')  moveLane(-1);
+  if (e.code === 'ArrowRight') moveLane(1);
+  if (e.code === 'Space' || e.key.toLowerCase()==='f') shoot();
+}, {capture:true});
+
+/* Mobile on-screen buttons */
+document.querySelectorAll('.ctrlBtn[data-dir]').forEach(btn =>{ btn.addEventListener('click', ()=> moveLane(parseInt(btn.dataset.dir,10))); });
+document.getElementById('fireBtn').addEventListener('click', shoot);
+
+/* ================= START / OVER / SHARE ================= */
+function show(el){ el.style.display='flex'; } function hide(el){ el.style.display='none'; }
+function startGame(){
+  lastMs = 0;
+  state.running = true; state.speed = BASE_SPEED;
+  state.lastMeteor=0; state.lastPickup=0; state.lastAccel=0;
+  state.meteors.length=0; state.pickups.length=0; state.bullets.length=0;
+  state.score = 0; document.getElementById('score').textContent = 0;
+  setAmmo(START_AMMO);
+  state.player.lane = 1; state.player.x = state.laneX[1];
+  state.runStartMs = Date.now();
+  hide(document.getElementById('start')); hide(document.getElementById('gameover'));
+  requestAnimationFrame(loop);
+}
+
+async function gameOver(){
+  if(!state.running) return;
+  state.running = false;
+  const duration = Math.max(0, Date.now() - (state.runStartMs||Date.now()));
+  const cardUrl = makeShareCard({ score: state.score, handle: state.handle, avatarImg: state.avatarImg });
+  document.getElementById('shareImg').src = cardUrl;
+  document.getElementById('dlBtn').setAttribute('href', cardUrl);
+  document.getElementById('finalTxt').textContent = `Your score: ${state.score}`;
+  show(document.getElementById('gameover'));
+  try{
+    await submitScore(state.handle.replace('@',''), state.score, duration, state.ammo);
+    await resetAndLoadLeaderboard(state.handle.replace('@',''));
+  }catch(e){ /* ignore */ }
+}
+
+function makeShareCard({score, handle, avatarImg}){
+  const W=960, H=540; const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
+  const bg1=g.createLinearGradient(0,0,0,H); bg1.addColorStop(0,'#0b0e12'); bg1.addColorStop(1,'#0e141a'); g.fillStyle=bg1; g.fillRect(0,0,W,H);
+  g.fillStyle='rgba(45,107,255,.25)'; g.beginPath(); g.ellipse(W*0.18, H*0.18, 240, 140, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle='rgba(255,59,89,.22)'; g.beginPath(); g.ellipse(W*0.85, H*0.25, 280, 160, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle='#EDEFF2'; g.font='900 64px Montserrat, sans-serif'; g.fillText('SENTIENT RUN', 40, 110);
+  g.fillStyle='#dbe3ea'; g.font='700 28px Montserrat, sans-serif'; g.fillText('Score', 40, 170);
+  g.fillStyle='#7bd389'; g.font='900 96px Montserrat, sans-serif'; g.fillText(String(score), 40, 260);
+  const at = handle || '@guest'; const AX=40, AY=320, AR=56; g.save(); g.beginPath(); g.arc(AX+AR, AY+AR, AR, 0, Math.PI*2); g.clip();
+  if (avatarImg){ g.drawImage(avatarImg, AX, AY, AR*2, AR*2); } else { g.fillStyle='#1b2436'; g.fillRect(AX,AY,AR*2,AR*2); g.fillStyle='#eaf2ff'; g.font='800 42px Montserrat, sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText((at.replace('@','').slice(0,2)||'LM').toUpperCase(), AX+AR, AY+AR); g.textAlign='start'; g.textBaseline='alphabetic'; }
+  g.restore(); g.fillStyle='#EDEFF2'; g.font='800 42px Montserrat, sans-serif'; g.fillText(at, AX + AR*2 + 20, AY + AR + 14);
+  /* === SHIP.PNG sağ tarafa çiz === */
+const ship = images.ship; // zaten yukarıda loadImg('ship', SHIP_IMG_SRC) ile yükleniyor
+if (ship && ship.complete && ship.naturalWidth) {
+  const targetH = 320; // karttaki gemi yüksekliği
+  const ratio   = ship.naturalWidth / ship.naturalHeight;
+  const targetW = Math.round(targetH * ratio);
+  const sx = W - targetW - 30;   // sağdan boşluk
+  const sy = H - targetH - 28;   // alttan boşluk
+
+  // Yumuşak bir parıltı (opsiyonel ama hoş duruyor)
+  const glow = g.createRadialGradient(sx + targetW*0.45, sy + targetH*0.7, 12, sx + targetW*0.45, sy + targetH*0.7, 200);
+  glow.addColorStop(0, 'rgba(45,107,255,.20)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = glow;
+  g.fillRect(sx-40, sy-40, targetW+80, targetH+120);
+
+  // Gemiyi bas
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.35)';
+  g.shadowBlur  = 24;
+  g.drawImage(ship, sx, sy, targetW, targetH);
+  g.restore();
+} else {
+  // ship.png yüklenemediyse küçük bir placeholder
+  g.fillStyle = 'rgba(45,107,255,.12)';
+  g.fillRect(W - 240 - 28, H - 280 - 24, 240, 280);
+}
+
+  g.strokeStyle='#2D6BFF'; g.lineWidth=6; (function r(gc,x,y,w,h,r){ const rr=Math.min(r,w/2,h/2); gc.beginPath(); gc.moveTo(x+rr,y); gc.arcTo(x+w,y,x+w,y+h,rr); gc.arcTo(x+w,y+h,x,y+h,rr); gc.arcTo(x,y+h,x,y,rr); gc.arcTo(x,y,x+w,y,rr); gc.closePath(); })(g,12,12,W-24,H-24,16); g.stroke();
+  g.fillStyle='#9fb3d4'; g.font='600 26px Montserrat, sans-serif'; g.fillText('sentient.io', W-250, H-28);
+  return c.toDataURL('image/png');
+}
+
+/* ================= Leaderboard ================= */
+const lb = document.getElementById('lb-list'); const lbMeta = document.getElementById('lb-meta'); const lbLoading = document.getElementById('lb-loading');
+let lbOffset = 0, lbPage = 50, lbTotal = null, lbIsLoading = false;
+
+async function submitScore(handle, score, timeMs, ammoLeft){
+  try{
+    const res = await fetch(API_SUBMIT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ handle, score, timeMs, ammoLeft }) });
+    if(!res.ok) throw new Error('submit failed'); return res.json();
+  }catch(e){ return {}; }
+}
+async function fetchLeaderboardPage(start=0, count=50, rankFor=null){
+  const u = new URL(API_LEADER, window.location.href);
+  u.searchParams.set('start', String(start)); u.searchParams.set('count', String(count));
+  if (rankFor) u.searchParams.set('rankFor', rankFor);
+  const res = await fetch(u, { headers:{'Accept':'application/json'} });
+  if(!res.ok) throw new Error('lb failed'); return res.json();
+}
+function formatMs(ms){ return (ms/1000).toFixed(2)+'s'; }
+function avatarFor(handle){ return `https://unavatar.io/x/${encodeURIComponent(handle)}`; }
+function renderLeaderboardItems(items, startIndex){
+  items.forEach((it, idx) => {
+    const rank = startIndex + idx + 1;
+    const li = document.createElement('li'); li.className='lb-item';
+    const av = avatarFor(it.handle);
+    li.innerHTML = `<span class="lb-rank">#${rank}</span>
+      <img class="lb-avatar" src="${av}" onerror="this.style.visibility='hidden'"/>
+      <span class="lb-handle">@${it.handle}</span>
+      <span class="lb-stats">${it.score} • ${formatMs(it.timeMs)}</span>`;
+    lb.appendChild(li);
+  });
+}
+async function resetAndLoadLeaderboard(rankFor=null){ lb.innerHTML=''; lbOffset=0; lbTotal=null; await loadMoreLeaderboard(rankFor); }
+async function loadMoreLeaderboard(rankFor=null){
+  if(lbIsLoading) return; lbIsLoading=true; lbLoading.style.display='block';
+  try{
+    const data = await fetchLeaderboardPage(lbOffset, lbPage, rankFor);
+    if (lbTotal==null) lbTotal = data.total ?? 0;
+    renderLeaderboardItems(data.items||[], lbOffset);
+    lbOffset += (data.items||[]).length;
+    lbMeta.textContent = lbTotal ? `${lbOffset}/${lbTotal}` : '';
+  } finally { lbIsLoading=false; lbLoading.style.display='none'; }
+}
+
+/* ============ Start & Share & Avatar ============ */
+const inputHandle = document.getElementById('inputHandle');
+document.getElementById('btnStart').addEventListener('click', ()=> beginWithHandle(inputHandle.value.trim()));
+document.getElementById('btnNoX').addEventListener('click', ()=> beginWithHandle(''));
+document.getElementById('btnAgain').addEventListener('click', startGame);
+document.getElementById('tweetBtn').addEventListener('click', ()=>{ const text = encodeURIComponent(`I played Sentient Run! Score: ${state.score} ${state.handle}\n#Sentient`); window.open('https://twitter.com/intent/tweet?text='+text, '_blank'); });
+
+function beginWithHandle(h){
+  if (h){
+    state.handle = h.startsWith('@') ? h : '@' + h;
+    document.getElementById('handle').textContent = state.handle;
+    loadAvatarFor(h);
+  } else {
+    state.handle = '@guest';
+    document.getElementById('handle').textContent = state.handle;
+    setAvatar(null);
+  }
+  startGame();
+  resetAndLoadLeaderboard(state.handle.replace('@','')).catch(()=>{});
+}
+
+/* ===== X AVATAR (unavatar flow) ===== */
+function candidateAvatarUrls(handle) {
+  const h = String(handle).replace(/^@/, '');
+  return [
+    `https://unavatar.io/x/${encodeURIComponent(h)}`,
+    `https://unavatar.io/twitter/${encodeURIComponent(h)}`,
+    `https://unavatar.io/${encodeURIComponent(h)}`,
+    `https://unavatar.io/https://x.com/${encodeURIComponent(h)}`
+  ];
+}
+function tryLoad(url) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => res(url);
+    img.onerror = rej;
+    img.src = url;
+    setTimeout(() => rej(new Error('timeout')), 6000);
+  });
+}
+async function resolveWorkingAvatar(handle) { for (const u of candidateAvatarUrls(handle)) { try { const ok = await tryLoad(u); return ok; } catch(e){} } return null; }
+function setAvatar(src) {
+  const img = document.getElementById('avatar');
+  if (!src) {
+    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(makeFallbackPfpSvg());
+    state.avatarImg = null; return;
+  }
+  img.crossOrigin = 'anonymous'; img.src = src;
+  img.onerror = () => { img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(makeFallbackPfpSvg()); state.avatarImg = null; }
+  img.onload  = () => { const a = new Image(); a.crossOrigin='anonymous'; a.src=src; a.onload=()=>state.avatarImg=a; a.onerror=()=>state.avatarImg=null; }
+}
+async function loadAvatarFor(handle) { const src = await resolveWorkingAvatar(handle); setAvatar(src); }
+function makeFallbackPfpSvg(){
+  const initials = state.handle && state.handle.length > 1 ? state.handle.replace('@','').slice(0,2).toUpperCase() : 'LM';
+  return `<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='#2D6BFF'/><stop offset='100%' stop-color='#FF66CC'/></linearGradient></defs><rect width='100%' height='100%' fill='url(#g)'/><text x='50%' y='56%' dominant-baseline='middle' text-anchor='middle' font-family='Montserrat, sans-serif' font-size='32' fill='#eaf2ff' font-weight='800'>${initials}</text></svg>`;
+}
+
+/* init */
+setAvatar(null);
+resetAndLoadLeaderboard().catch(()=>{});
+</script>
+</body>
+</html>
