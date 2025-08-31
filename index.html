@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Sentient Run – 3-Lane Runner</title>
+<title>Dobby in Space– 3-Lane Runner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&display=swap" rel="stylesheet"/>
@@ -37,16 +37,18 @@
 
   /* ===== GAME AREA ===== */
   #gameWrap{ display:flex; justify-content:flex-start; }
-  #gameFrame{
-    position:relative;
-    width:min(520px, 96vw);
-    aspect-ratio:9/16;
-    border-radius:20px;
-    overflow:hidden;                 /* kritik: her şey alanın içinde kalır */
-    background:#071019;
-    box-shadow:0 14px 46px rgba(0,0,0,.45);
-    border:1px solid #20314a;
-  }
+ #gameFrame{
+  position:relative;
+/*  width:min(520px, 96vw);  */   /* ← BU SATIRI KALDIR/DEĞİŞTİR */
+  width:min(420px, 90vw);         /* ← DAHA KÜÇÜK TABAN GENİŞLİK */
+  max-height:78vh;                /* ← YÜKSEKLİĞİ EKRANA GÖRE SINIRLA */
+  aspect-ratio:9/16;
+  border-radius:20px;
+  overflow:hidden;
+  background:#071019;
+  box-shadow:0 14px 46px rgba(0,0,0,.45);
+  border:1px solid #20314a;
+}
   #game{ width:100%; height:100%; display:block; } /* gerçek piksel JS’te */
 
   /* In-canvas HUD (INSIDE the game rectangle) */
@@ -163,7 +165,7 @@
   <!-- Start -->
   <div id="start" class="overlay" role="dialog" aria-modal="true">
     <div class="card">
-      <h1 class="title">Sentient Run</h1>
+      <h1 class="title">Dobby in Space</h1>
       <div class="muted">Enter your X (Twitter) handle. We'll fetch your avatar and start the game.</div>
       <div class="row"><input id="inputHandle" type="text" placeholder="e.g., sentient_io" autocomplete="off"/></div>
       <div class="row">
@@ -521,7 +523,7 @@ function makeShareCard({score, handle, avatarImg}){
   const bg1=g.createLinearGradient(0,0,0,H); bg1.addColorStop(0,'#0b0e12'); bg1.addColorStop(1,'#0e141a'); g.fillStyle=bg1; g.fillRect(0,0,W,H);
   g.fillStyle='rgba(45,107,255,.25)'; g.beginPath(); g.ellipse(W*0.18, H*0.18, 240, 140, 0, 0, Math.PI*2); g.fill();
   g.fillStyle='rgba(255,59,89,.22)'; g.beginPath(); g.ellipse(W*0.85, H*0.25, 280, 160, 0, 0, Math.PI*2); g.fill();
-  g.fillStyle='#EDEFF2'; g.font='900 64px Montserrat, sans-serif'; g.fillText('SENTIENT RUN', 40, 110);
+  g.fillStyle='#EDEFF2'; g.font='900 64px Montserrat, sans-serif'; g.fillText('Dobby in Space', 40, 110);
   g.fillStyle='#dbe3ea'; g.font='700 28px Montserrat, sans-serif'; g.fillText('Score', 40, 170);
   g.fillStyle='#7bd389'; g.font='900 96px Montserrat, sans-serif'; g.fillText(String(score), 40, 260);
   const at = handle || '@guest'; const AX=40, AY=320, AR=56; g.save(); g.beginPath(); g.arc(AX+AR, AY+AR, AR, 0, Math.PI*2); g.clip();
@@ -608,7 +610,7 @@ const inputHandle = document.getElementById('inputHandle');
 document.getElementById('btnStart').addEventListener('click', ()=> beginWithHandle(inputHandle.value.trim()));
 document.getElementById('btnNoX').addEventListener('click', ()=> beginWithHandle(''));
 document.getElementById('btnAgain').addEventListener('click', startGame);
-document.getElementById('tweetBtn').addEventListener('click', ()=>{ const text = encodeURIComponent(`I played Sentient Run! Score: ${state.score} ${state.handle}\n#Sentient`); window.open('https://twitter.com/intent/tweet?text='+text, '_blank'); });
+document.getElementById('tweetBtn').addEventListener('click', ()=>{ const text = encodeURIComponent(`I played Dobby in Space! Score: ${state.score} ${state.handle}\n#Sentient`); window.open('https://twitter.com/intent/tweet?text='+text, '_blank'); });
 
 function beginWithHandle(h){
   if (h){
