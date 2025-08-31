@@ -117,6 +117,23 @@
     #gameover .card{ width:min(88vw, 360px); }
     :root{ --ammo-icon:28px; --hud-pad:10px; }
   }
+  /* ——— sosyal imza ——— */
+#socialTag{
+  position:fixed;
+  right:12px;
+  bottom:12px;
+  font-size:12px;
+  background:rgba(255,255,255,.06);
+  border:1px solid #2a3550;
+  padding:6px 8px;
+  border-radius:10px;
+  color:#c9d3de;
+  z-index:200;
+}
+#socialTag a{ color:#4da3ff; text-decoration:none; }
+#socialTag a:hover{ text-decoration:underline; }
+#socialTag .sep{ margin:0 6px; opacity:.5; }
+
 </style>
 </head>
 <body>
@@ -667,5 +684,11 @@ function makeFallbackPfpSvg(){
 setAvatar(null);
 resetAndLoadLeaderboard().catch(()=>{});
 </script>
+  <div id="socialTag" aria-label="social handles">
+  discord: <span style="font-weight:700">cryptoayax</span>
+  <span class="sep">•</span>
+  x: <a href="https://x.com/cryptoayax" target="_blank" rel="noopener noreferrer">cryptoayax</a>
+</div>
+
 </body>
 </html>
