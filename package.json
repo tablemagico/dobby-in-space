@@ -1,6 +1,5 @@
 {
-  "name": "sentient-run-leaderboard",
-  "version": "1.0.0",
+  "name": "dobby-in-space",
   "private": true,
   "dependencies": {
     "ioredis": "5.4.1"
